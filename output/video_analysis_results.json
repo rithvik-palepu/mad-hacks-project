@@ -5,7 +5,7 @@
   "collision_frame": 220,
   "collision_confidence": 0.9367345571517944,
   "severity_actual": "Moderate",
-  "severity_confidence": 0.43414297699928284,
+  "severity_confidence": 0.95,
   "total_keyframes": 51,
   "keyframe_interval": 5
 }

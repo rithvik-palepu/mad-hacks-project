@@ -227,21 +227,88 @@ class VideoKeyframeProcessor:
         
         return inter_area / union_area if union_area > 0 else 0.0
     
-    def classify_severity(self, frame: np.ndarray) -> Tuple[str, float]:
+    def classify_severity(self, frame: np.ndarray, detections: List[Dict] = None) -> Tuple[str, float]:
         """
-        Classify accident severity from frame.
+        Classify accident severity from frame using rule-based approach.
         
         Args:
             frame: Input frame (numpy array)
+            detections: Vehicle detections from collision detection
             
         Returns:
             Tuple of (severity_class, confidence)
         """
-        # Convert BGR to RGB and create PIL Image
+        # Rule-based severity assessment for hackathon speed
+        severity_score = 0
+        confidence = 0.0
+        
+        if detections:
+            # Factor 1: Number of vehicles involved
+            num_vehicles = len(detections)
+            if num_vehicles >= 3:
+                severity_score += 30
+            elif num_vehicles == 2:
+                severity_score += 15
+            
+            # Factor 2: Maximum overlap (IoU) between vehicles
+            max_iou = 0.0
+            for i in range(len(detections)):
+                for j in range(i + 1, len(detections)):
+                    iou = self._calculate_iou(
+                        detections[i]['bbox'], 
+                        detections[j]['bbox']
+                    )
+                    max_iou = max(max_iou, iou)
+            
+            # High overlap = severe impact
+            if max_iou > 0.5:
+                severity_score += 40
+            elif max_iou > 0.3:
+                severity_score += 25
+            elif max_iou > 0.15:
+                severity_score += 10
+            
+            # Factor 3: Size of vehicles (larger bbox = more debris/damage)
+            total_area = 0
+            for det in detections:
+                bbox = det['bbox']
+                area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+                total_area += area
+            
+            # Normalize by frame size
+            frame_area = frame.shape[0] * frame.shape[1]
+            area_ratio = total_area / frame_area
+            
+            if area_ratio > 0.4:
+                severity_score += 30
+            elif area_ratio > 0.25:
+                severity_score += 15
+            
+            # Calculate confidence based on detection quality
+            avg_conf = sum(d['confidence'] for d in detections) / len(detections)
+            confidence = min(0.95, avg_conf + 0.2)  # Boost confidence for rule-based
+        
+        # Map score to severity class
+        if severity_score >= 60:
+            severity_class = "Severe"
+        elif severity_score >= 30:
+            severity_class = "Moderate"
+        else:
+            severity_class = "Minor"
+        
+        # If no detections, fall back to ML model
+        if not detections:
+            return self._ml_classify_severity(frame)
+        
+        return severity_class, confidence
+    
+    def _ml_classify_severity(self, frame: np.ndarray) -> Tuple[str, float]:
+        """
+        ML-based severity classification (fallback method).
+        """
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(frame_rgb)
         
-        # Preprocess and run inference
         input_tensor = self.severity_transform(pil_image).unsqueeze(0)
         
         with torch.no_grad():
@@ -293,30 +360,37 @@ class VideoKeyframeProcessor:
             frame = keyframe_info['frame']
             detected, confidence, detections = self.detect_collision(frame)
             
-            if detected and confidence > collision_confidence:
-                collision_frame = keyframe_info['frame_number']
-                collision_timestamp = keyframe_info['timestamp']
-                collision_confidence = confidence
-                
-                print(f"  Frame {keyframe_info['frame_number']}: "
+            if detected:
+                # Keep track of highest confidence collision
+                if confidence > collision_confidence:
+                    collision_frame = keyframe_info['frame_number']
+                    collision_timestamp = keyframe_info['timestamp']
+                    collision_confidence = confidence
+
+                    print(f"  Frame {keyframe_info['frame_number']}: "
                       f"COLLISION DETECTED (confidence: {confidence:.3f})")
         
         # If collision detected, classify severity
         severity_actual = None
         severity_confidence = 0.0
+        collision_detections = None
         
         if collision_frame is not None:
             print(f"\nCollision detected at frame {collision_frame} "
                   f"(timestamp: {collision_timestamp:.2f}s)")
             
-            # Find the collision keyframe
+            # Find the collision keyframe and re-run detection for severity analysis
             collision_keyframe = next(
                 kf for kf in keyframes if kf['frame_number'] == collision_frame
             )
             
-            # Classify severity
+            # Get detections for severity classification
+            _, _, collision_detections = self.detect_collision(collision_keyframe['frame'])
+            
+            # Classify severity with detection context
             severity_actual, severity_confidence = self.classify_severity(
-                collision_keyframe['frame']
+                collision_keyframe['frame'],
+                detections=collision_detections
             )
             
             print(f"Severity classification: {severity_actual} "
