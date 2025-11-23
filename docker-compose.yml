@@ -1,16 +1,33 @@
 version: '3.8'
 
 services:
-  evidencecheck:
-    build: .
+  # Backend Service (FastAPI)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
-      - "8501:8501"
-    container_name: evidencecheck-app
+      - "8000:8000"
+    container_name: evidencecheck-backend
     volumes:
-      # Optional: Mount a folder for test videos
+      # Mount test videos so they are accessible inside container
       - ./test_videos:/app/test_videos:ro
     environment:
-      - STREAMLIT_SERVER_PORT=8501
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - PORT=8000
     restart: unless-stopped
 
+  # Frontend Service (React + Vite)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    container_name: evidencecheck-frontend
+    # Ensure backend starts before frontend
+    depends_on:
+      - backend
+    environment:
+      # If your frontend needs to know where the API is
+      - VITE_API_URL=http://localhost:8000
+    restart: unless-stopped
