@@ -1,0 +1,7 @@
+{
+    "Video_Path": "data/CADP_accident_002_rear_end.avi",
+    "Collision_Detected": true,
+    "F_Actual": 600,
+    "T_Actual": 20.0,
+    "Severity_Actual": "Severe"
+}
