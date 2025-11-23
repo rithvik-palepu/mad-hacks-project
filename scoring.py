@@ -1,125 +1,117 @@
 """
-Consistency Scoring Module
+Consistency Auditor Module (Part 2.3)
 
-Compares text claims against video analysis results and calculates
-a consistency score with detailed breakdown per claim type.
+This module compares extracted text data (NLP) against video analysis data (CV).
+It calculates a consistency score based on Time Difference and Severity Matching.
 """
 
 from typing import Dict, Any, List
 
+# --- CONFIGURATION ---
+TIME_THRESHOLD_SECONDS = 5  # Allowable margin of error for timestamp
+SCORE_WEIGHT_TIME = 50      # Points awarded for matching time
+SCORE_WEIGHT_SEVERITY = 50  # Points awarded for matching severity
 
-def score_consistency(
-    claims: Dict[str, Any],
-    video_stats: Dict[str, Any]
-) -> Dict[str, Any]:
+def score_consistency(nlp_data: Dict[str, Any], cv_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Compute a consistency score between text claims and video analysis.
-    
+    Audits the consistency between the Written Report and Video Evidence.
+
     Args:
-        claims: Dictionary with extracted claims from text
-                (people, cars, weapon_present - each can be None)
-        video_stats: Dictionary with video analysis results
-                     (people, cars, weapon_present, frames)
-    
+        nlp_data: Dictionary containing 'TReport' (int) and 'SeverityReport' (str).
+        cv_data: Dictionary containing 'T_Actual' (int), 'Severity_Actual' (str), 
+                 and 'Collision_Detected' (bool).
+
     Returns:
-        Dictionary containing:
-        - score: Integer from 0-100 representing consistency score
-        - details: List of dictionaries with per-claim breakdown:
-            - claim_type: "people" | "cars" | "weapon"
-            - claim_value: The value from the text claim
-            - video_value: The value detected in the video
-            - result: "supported" | "partial" | "unsupported"
-            - note: String explanation of the result
+        Dict containing:
+            - 'score': Total score (0-100)
+            - 'details': List of dictionaries for the UI table
+            - 'status': Overall status string
     """
-    score = 100
+    
     details = []
+    total_score = 0
     
-    # Score people claim
-    if claims.get("people") is not None:
-        claim_people = claims["people"]
-        video_people = video_stats.get("people", 0)
+    # --- 1. PRE-FLIGHT CHECK: DID A COLLISION HAPPEN? ---
+    # If the CV model didn't detect a crash, we cannot verify time or severity.
+    collision_detected = cv_data.get("Collision_Detected", False)
+    
+    if not collision_detected:
+        return {
+            "score": 0,
+            "status": "NO COLLISION DETECTED IN VIDEO",
+            "details": [{
+                "claim_type": "Event Existence",
+                "claim_value": "Accident Reported",
+                "video_value": "No Collision Detected",
+                "result": "FAIL",
+                "note": "The AI could not find a crash in the footage."
+            }]
+        }
+
+    # --- 2. AUDIT: TIME CONSISTENCY ---
+    t_report = nlp_data.get("TReport", -1)
+    t_actual = cv_data.get("T_Actual", -1)
+    time_status = "FAIL"
+    time_note = ""
+    
+    # Handle missing data cases
+    if t_report == -1:
+        time_note = "No time found in text report."
+        time_status = "MISSING DATA"
+    elif t_actual == -1:
+        time_note = "No impact timestamp calculated."
+        time_status = "MISSING DATA"
+    else:
+        # THE CORE LOGIC: Absolute Difference
+        delta_t = abs(t_report - t_actual)
         
-        diff = abs(claim_people - video_people)
-        
-        if diff == 0:
-            result = "supported"
-            note = f"Exact match: {claim_people} people detected"
-        elif diff <= 1:
-            result = "partial"
-            note = f"Close match: claimed {claim_people}, detected {video_people} (difference: {diff})"
-            score -= 10
+        if delta_t <= TIME_THRESHOLD_SECONDS:
+            total_score += SCORE_WEIGHT_TIME
+            time_status = "MATCH"
+            time_note = f"Difference of {delta_t}s is within tolerance ({TIME_THRESHOLD_SECONDS}s)."
         else:
-            result = "unsupported"
-            note = f"Mismatch: claimed {claim_people}, detected {video_people} (difference: {diff})"
-            score -= 30
-        
-        details.append({
-            "claim_type": "people",
-            "claim_value": claim_people,
-            "video_value": video_people,
-            "result": result,
-            "note": note
-        })
-    
-    # Score cars claim
-    if claims.get("cars") is not None:
-        claim_cars = claims["cars"]
-        video_cars = video_stats.get("cars", 0)
-        
-        diff = abs(claim_cars - video_cars)
-        
-        if diff == 0:
-            result = "supported"
-            note = f"Exact match: {claim_cars} cars detected"
-        elif diff <= 1:
-            result = "partial"
-            note = f"Close match: claimed {claim_cars}, detected {video_cars} (difference: {diff})"
-            score -= 10
-        else:
-            result = "unsupported"
-            note = f"Mismatch: claimed {claim_cars}, detected {video_cars} (difference: {diff})"
-            score -= 30
-        
-        details.append({
-            "claim_type": "cars",
-            "claim_value": claim_cars,
-            "video_value": video_cars,
-            "result": result,
-            "note": note
-        })
-    
-    # Score weapon claim
-    if claims.get("weapon_present") is not None:
-        claim_weapon = claims["weapon_present"]
-        video_weapon = video_stats.get("weapon_present", False)
-        
-        if claim_weapon == video_weapon:
-            result = "supported"
-            if claim_weapon:
-                note = "Weapon presence matches: both indicate weapon present"
-            else:
-                note = "Weapon absence matches: both indicate no weapon"
-        else:
-            result = "unsupported"
-            if claim_weapon and not video_weapon:
-                note = "Mismatch: text claims weapon present, but no weapon detected in video"
-            else:
-                note = "Mismatch: text claims no weapon, but weapon detected in video"
-            score -= 40
-        
-        details.append({
-            "claim_type": "weapon",
-            "claim_value": claim_weapon,
-            "video_value": video_weapon,
-            "result": result,
-            "note": note
-        })
-    
-    # Clamp score between 0 and 100
-    score = max(0, min(100, score))
-    
+            time_status = "INCONSISTENT"
+            time_note = f"Time gap ({delta_t}s) exceeds threshold."
+
+    # Log Time Detail
+    details.append({
+        "claim_type": "Time of Impact",
+        "claim_value": f"{t_report} sec" if t_report != -1 else "Unknown",
+        "video_value": f"{t_actual} sec" if t_actual != -1 else "Unknown",
+        "result": time_status,
+        "note": time_note
+    })
+
+    # --- 3. AUDIT: SEVERITY CONSISTENCY ---
+    sev_report = str(nlp_data.get("SeverityReport", "Unknown")).lower().strip()
+    sev_actual = str(cv_data.get("Severity_Actual", "Unknown")).lower().strip()
+    sev_status = "FAIL"
+    sev_note = ""
+
+    if sev_report == "unknown" or sev_actual == "unknown":
+        sev_status = "MISSING DATA"
+        sev_note = "Could not determine severity from one or both sources."
+    elif sev_report == sev_actual:
+        total_score += SCORE_WEIGHT_SEVERITY
+        sev_status = "MATCH"
+        sev_note = "Reported severity matches video analysis."
+    else:
+        # Simple Logic: Mismatch
+        sev_status = "MISMATCH"
+        sev_note = f"Report says '{sev_report}', Video shows '{sev_actual}'."
+
+    # Log Severity Detail
+    details.append({
+        "claim_type": "Accident Severity",
+        "claim_value": sev_report.title(),
+        "video_value": sev_actual.title(),
+        "result": sev_status,
+        "note": sev_note
+    })
+
+    # --- 4. FINAL AGGREGATION ---
     return {
-        "score": int(score),
+        "score": total_score,
+        "status": "COMPLETE",
         "details": details
     }
-
