@@ -440,7 +440,7 @@ if __name__ == "__main__":
     )
     
     # Process video
-    video_path = "data/clip1.mp4"
+    video_path = "data/clip1/clip1.mp4"
     results = processor.process_video(
         video_path=video_path,
         output_dir="output/keyframes"
