@@ -1,4 +1,4 @@
-import { Upload, Loader2 } from "lucide-react";
+import { Upload, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 interface UploadSectionProps {
   videoFile: File | null;
   setVideoFile: (file: File | null) => void;
+  textFile: File | null;
+  setTextFile: (file: File | null) => void;
   textDescription: string;
   setTextDescription: (text: string) => void;
   onAnalyze: () => void;
@@ -17,6 +19,8 @@ interface UploadSectionProps {
 export const UploadSection = ({
   videoFile,
   setVideoFile,
+  textFile,
+  setTextFile,
   textDescription,
   setTextDescription,
   onAnalyze,
@@ -24,7 +28,7 @@ export const UploadSection = ({
 }: UploadSectionProps) => {
   const { toast } = useToast();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 100 * 1024 * 1024) {
@@ -39,6 +43,35 @@ export const UploadSection = ({
     }
   };
 
+  const handleTextFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const allowedExtensions = [".txt", ".pdf", ".doc", ".docx", ".md"];
+      const fileExtension = "." + file.name.split(".").pop()?.toLowerCase();
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a .txt, .pdf, .doc, .docx, or .md file",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please upload a text file under 10MB",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      setTextFile(file);
+    }
+  };
+
   const handleAnalyzeClick = () => {
     if (!videoFile) {
       toast({
@@ -48,10 +81,10 @@ export const UploadSection = ({
       });
       return;
     }
-    if (!textDescription.trim()) {
+    if (!textFile && !textDescription.trim()) {
       toast({
         title: "Description required",
-        description: "Please provide a text description",
+        description: "Please upload a text file or enter a description in the text area",
         variant: "destructive"
       });
       return;
@@ -79,7 +112,7 @@ export const UploadSection = ({
                   id="video-upload"
                   type="file"
                   accept="video/*"
-                  onChange={handleFileChange}
+                  onChange={handleVideoFileChange}
                   className="hidden"
                 />
                 <label
@@ -106,24 +139,80 @@ export const UploadSection = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="text-description" className="text-base font-semibold">
+            <Label htmlFor="text-file-upload" className="text-base font-semibold">
               Text Description
             </Label>
-            <Textarea
-              id="text-description"
-              placeholder="Enter claims to verify (e.g., 'Three people, two cars, no weapons visible')"
-              value={textDescription}
-              onChange={(e) => setTextDescription(e.target.value)}
-              className="min-h-32 resize-none"
-            />
-            <p className="text-xs text-muted-foreground">
-              Supported claims: Number of people, vehicles, and weapon presence/absence
-            </p>
+            <div className="space-y-3">
+              {/* Primary: File Upload */}
+              <div className="relative">
+                <input
+                  id="text-file-upload"
+                  type="file"
+                  accept=".txt,.pdf,.doc,.docx,.md"
+                  onChange={handleTextFileChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="text-file-upload"
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 p-8 transition-colors hover:border-accent hover:bg-accent/5"
+                >
+                  <FileText className="mb-3 h-10 w-10 text-muted-foreground" />
+                  {textFile ? (
+                    <div className="text-center">
+                      <p className="font-medium text-foreground">{textFile.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(textFile.size / 1024).toFixed(2)} KB
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <p className="font-medium text-foreground">Click to upload report or description</p>
+                      <p className="text-sm text-muted-foreground">PDF, DOCX, TXT, DOC, or MD up to 10MB</p>
+                    </div>
+                  )}
+                </label>
+              </div>
+              
+              {/* Helper text */}
+              <p className="text-xs text-muted-foreground px-1">
+                Upload a report or written description (PDF, DOCX, or TXT).
+              </p>
+              
+              {/* Separator */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+              
+              {/* Fallback: Text Area */}
+              <div className="space-y-2">
+                <Label htmlFor="text-description" className="text-sm font-medium text-muted-foreground">
+                  Manual Entry (Optional)
+                </Label>
+                <Textarea
+                  id="text-description"
+                  placeholder="Enter claims to verify (e.g., 'Three people, two cars, no weapons visible')"
+                  value={textDescription}
+                  onChange={(e) => setTextDescription(e.target.value)}
+                  className="min-h-24 resize-none"
+                  disabled={!!textFile}
+                />
+                <p className="text-xs text-muted-foreground px-1">
+                  {textFile 
+                    ? "A file is uploaded, so manual entry is disabled. Remove the file to use manual entry."
+                    : "If a file is uploaded, EvidenceCheck will use it as the incident description; otherwise it will use the text above."}
+                </p>
+              </div>
+            </div>
           </div>
 
           <Button
             onClick={handleAnalyzeClick}
-            disabled={isAnalyzing || !videoFile || !textDescription}
+            disabled={isAnalyzing || !videoFile || (!textFile && !textDescription.trim())}
             size="lg"
             className="w-full bg-gradient-accent font-semibold shadow-glow transition-all hover:scale-[1.02]"
           >
