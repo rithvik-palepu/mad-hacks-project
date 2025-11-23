@@ -49,8 +49,6 @@ class HandwritingEngine(OCREngine):
     """
     Advanced OCR for HANDWRITTEN text (Cursive/Print).
     Uses Microsoft's TrOCR (Transformer-based Optical Character Recognition).
-    
-    NOTE: This requires 'transformers' and 'torch' libraries.
     """
     def __init__(self):
         self.processor = None
@@ -58,8 +56,7 @@ class HandwritingEngine(OCREngine):
         self.enabled = False
         
         # In a real deployment, you would uncomment the imports below.
-        # We keep them commented to ensure the demo runs without heavy dependencies.
-        """
+        
         try:
             from transformers import TrOCRProcessor, VisionEncoderDecoderModel
             from PIL import Image
@@ -73,7 +70,6 @@ class HandwritingEngine(OCREngine):
             self.enabled = True
         except ImportError:
             logger.warning("Transformers/Torch not found. Handwriting OCR disabled.")
-        """
         if not self.enabled:
             logger.warning("Handwriting Engine is currently a placeholder. Install 'transformers' to enable.")
 
@@ -81,7 +77,6 @@ class HandwritingEngine(OCREngine):
         if not self.enabled:
             return "[HANDWRITING OCR NOT LOADED]"
         
-        # TrOCR Logic (Skeleton)
         try:
             image = self.Image.open(image_path).convert("RGB")
             pixel_values = self.processor(images=image, return_tensors="pt").pixel_values
@@ -107,7 +102,6 @@ class ReportProcessor:
         }
         self.type_keywords = ["head-on", "rear-end", "sideswipe", "collision", "T-bone"]
 
-        # Select Engine Strategy
         if use_handwriting_model:
             logger.info("Initializing Advanced Handwriting Engine...")
             self.ocr_engine = HandwritingEngine()
@@ -116,10 +110,38 @@ class ReportProcessor:
             self.ocr_engine = TesseractEngine(cmd_path=tesseract_cmd)
 
     def _parse_time_to_seconds(self, time_str: str) -> int:
-        """Parses time strings (12h/24h) into total seconds."""
+        """
+        Parses time strings (12h/24h) into total seconds.
+        Includes robust 'Dirty OCR' cleaning for digit confusion.
+        """
         time_str = time_str.upper().strip()
-        # Handle common OCR errors (e.g., 'O' instead of '0')
-        time_str = time_str.replace("O", "0").replace("o", "0")
+        
+        # --- Expanded OCR Error Correction for Time ---
+        # OCR often confuses letters with numbers. 
+        # We apply these replacements to sanitize the input.
+        ocr_digit_map = {
+            "O": "0", "o": "0", "Q": "0", "D": "0",  # Zero-likes
+            "I": "1", "l": "1", "L": "1", "|": "1",  # One-likes
+            "Z": "2",                                # Two-likes
+            "S": "5", "s": "5",                      # Five-likes
+            "B": "8",                                # Eight-likes
+            "G": "6"                                 # Six-likes
+        }
+        
+        # Logic: Isolate AM/PM, clean digits, recombine.
+        meridian = ""
+        if "PM" in time_str: meridian = "PM"
+        elif "AM" in time_str: meridian = "AM"
+        
+        # Remove meridian to focus on cleaning digits
+        clean_part = time_str.replace("PM", "").replace("AM", "").strip()
+        
+        # Apply digit map to the numbers part
+        for char, digit in ocr_digit_map.items():
+            clean_part = clean_part.replace(char, digit)
+            
+        # Reconstruct normalized string
+        time_str = f"{clean_part} {meridian}".strip()
         
         is_pm = "PM" in time_str
         is_am = "AM" in time_str
@@ -141,19 +163,22 @@ class ReportProcessor:
             return -1
 
     def extract_time(self, text: str) -> int:
-        # 1. Look for labeled time fields often found in forms
-        form_regex = r"(?:Time|at)[:\s\.]*(\d{1,2}\s*[:\.]\s*\d{2})(?:\s*[:\.]\s*\d{2})?\s*(AM|PM)?"
+        # 1. Look for labeled time fields (Contextual Search)
+        # Regex matches digits OR common OCR letter-errors (O, I, l, S, etc.)
+        # This allows us to catch "Time: l0:30" and pass it to the cleaner logic.
+        form_regex = r"(?:Time|at)[:\s\.]*([0-9OQlIzsS]{1,2}\s*[:\.]\s*[0-9OQlIzsS]{2})(?:\s*[:\.]\s*[0-9OQlIzsS]{2})?\s*(AM|PM)?"
         match = re.search(form_regex, text, re.IGNORECASE)
         
         if match:
-            time_str = match.group(1).replace(".", ":") # Fix common OCR error 10.30 -> 10:30
+            time_str = match.group(1).replace(".", ":") # Fix dot vs colon
             if match.group(2):
                 time_str += f" {match.group(2)}"
             logger.info(f"Time found (Contextual): {time_str}")
             return self._parse_time_to_seconds(time_str)
 
-        # 2. Look for standalone time patterns
-        general_regex = r"\b(\d{1,2}:\d{2}(?::\d{2})?)\b"
+        # 2. Look for standalone time patterns (General Search)
+        # Slightly stricter to avoid false positives, but allows basic O/I errors
+        general_regex = r"\b([0-9OQlI]{1,2}:[0-9OQlI]{2}(?::[0-9OQlI]{2})?)\b"
         match = re.search(general_regex, text)
         if match:
             logger.info(f"Time found (General): {match.group(1)}")
@@ -163,10 +188,47 @@ class ReportProcessor:
 
     def extract_severity(self, text: str) -> str:
         text_lower = text.lower()
-        # Normalize common handwriting OCR mistakes
-        # e.g., "sever" -> "severe", "nimer" -> "minor"
-        text_lower = text_lower.replace("sever ", "severe ").replace("mincr", "minor")
         
+        # --- Comprehensive OCR/Spelling Correction Map ---
+        # Maps regex pattern -> corrected word
+        # Covers substitutions, truncations, and visual mimicry
+        ocr_fixes = {
+            # Severe: v->u, v->y, e->c, truncations
+            r'\bsever\b': 'severe',
+            r'\bsevre\b': 'severe',
+            r'\bsvere\b': 'severe',
+            r'\bseyere\b': 'severe',
+            r'\b5evere\b': 'severe',
+            r'\bseverc\b': 'severe',
+            r'\bsevcre\b': 'severe',
+            
+            # Fatal: l->1, l->I, t->f, l->i
+            r'\bfata1\b': 'fatal',
+            r'\bfataI\b': 'fatal',
+            r'\bfatai\b': 'fatal',
+            r'\bfatsl\b': 'fatal',
+            
+            # Minor: o->c, o->a, m->rn, n->m, i->l
+            r'\bmincr\b': 'minor',
+            r'\bminar\b': 'minor',
+            r'\brninor\b': 'minor', # 'rn' looks like 'm'
+            r'\bmlnor\b': 'minor',
+            r'\bninor\b': 'minor',  # 'n' looks like 'm'
+            r'\bmimor\b': 'minor',
+            
+            # Moderate: d->b, ate->8, n->m
+            r'\bmoderate\b': 'moderate',
+            r'\bmoberate\b': 'moderate', # 'b' looks like 'd'
+            r'\bnoderate\b': 'moderate',
+            r'\bmodr8\b': 'moderate',
+            r'\bmodrate\b': 'moderate'
+        }
+
+        # Apply corrections via Regex Substitution
+        for pattern, correction in ocr_fixes.items():
+            text_lower = re.sub(pattern, correction, text_lower)
+        
+        # Standard keyword matching
         for sev_level, keywords in self.severity_keywords.items():
             for keyword in keywords:
                 if re.search(r'\b' + re.escape(keyword) + r'\b', text_lower):
@@ -183,7 +245,6 @@ class ReportProcessor:
         if not raw_text:
             return {"error": "No text to process"}
 
-        # Clean up raw text (remove newlines inside sentences, etc)
         clean_text = raw_text.replace("\n", " ")
 
         return {
