@@ -41,7 +41,7 @@ EvidenceCheck MVP is designed to:
    ⚠️ **First build takes 5-10 minutes** (downloading dependencies)
 
 3. **Open your browser:**
-   - Navigate to: `http://localhost:8501`
+   - Navigate to: `http://localhost:3000`
    - App should be running!
 
 4. **Stop the application:**
