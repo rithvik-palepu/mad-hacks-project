@@ -17,6 +17,42 @@ EvidenceCheck MVP is designed to:
 - **Number of cars/vehicles**: "Two cars", "1 vehicle", etc.
 - **Weapon presence/absence**: "gun present", "no weapon", etc.
 
+## 🐳 Quick Start with Docker (Recommended)
+
+**The easiest way to run EvidenceCheck - no Python setup needed!**
+
+### Prerequisites
+- Docker Desktop installed ([Download here](https://www.docker.com/products/docker-desktop))
+- Git installed
+
+### Steps
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/rithvik-palepu/mad-hacks-project.git
+   cd mad-hacks-project
+   ```
+
+2. **Build and run with Docker:**
+   ```bash
+   docker-compose up --build
+   ```
+   
+   ⚠️ **First build takes 5-10 minutes** (downloading dependencies)
+
+3. **Open your browser:**
+   - Navigate to: `http://localhost:8501`
+   - App should be running!
+
+4. **Stop the application:**
+   ```bash
+   docker-compose down
+   ```
+
+**That's it!** No Python, no virtual environments, no dependency management needed.
+
+For more Docker options, see [DOCKER.md](DOCKER.md)
+
 ## 🏗️ Architecture
 
 The project consists of four main modules:
@@ -279,3 +315,4 @@ This is an MVP project for MadHacks 2025.
 
 **Happy Testing! 🚀**
 
+# mad-hacks-project
