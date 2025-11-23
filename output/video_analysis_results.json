@@ -1,0 +1,11 @@
+{
+  "video_path": "test_videos/clip1.mp4",
+  "collision_detected": true,
+  "T_actual": 7.342432598039216,
+  "collision_frame": 220,
+  "collision_confidence": 0.9367345571517944,
+  "severity_actual": "Moderate",
+  "severity_confidence": 0.43414297699928284,
+  "total_keyframes": 51,
+  "keyframe_interval": 5
+}
