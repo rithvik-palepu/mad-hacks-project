@@ -1,5 +1,5 @@
 import json
-from scoring import ConsistencyAuditor
+from scoring import score_consistency
 
 # --- MOCKING THE IMPORTS FROM YOUR OTHER FILES ---
 # In your real project, you would import these:
@@ -43,27 +43,47 @@ def run_pipeline_test():
     # ---------------------------------------------------------
     print("\n3️⃣  Running Consistency Auditor...")
     
-    auditor = ConsistencyAuditor(time_threshold=5.0)
-    audit_report = auditor.audit(nlp_output, cv_output)
+    # Call the function from scoring.py
+    audit_report = score_consistency(nlp_output, cv_output)
 
     # ---------------------------------------------------------
     # FINAL OUTPUT
     # ---------------------------------------------------------
     print("\n📊 FINAL AUDIT REPORT")
-    print("="*30)
+    print("="*40)
     
-    time_res = audit_report['Time_Audit']
-    sev_res = audit_report['Severity_Audit']
+    # Extract details from the list structure returned by scoring.py
+    details = audit_report['details']
     
-    print(f"TIME CHECK:      [{time_res['Consistency']}]")
-    print(f"   Difference:   {time_res['Discrepancy_Seconds']} seconds")
-    print(f"   (Report: {time_res['Reported']}s vs Video: {time_res['Actual']}s)")
-    print("-" * 30)
-    print(f"SEVERITY CHECK:  [{sev_res['Match']}]")
-    print(f"   (Report: '{sev_res['Reported']}' vs Video: '{sev_res['Actual']}')")
-    print("="*30)
+    # Find specific checks for clean printing
+    time_check = next((d for d in details if d['claim_type'] == "Time of Impact"), None)
+    sev_check = next((d for d in details if d['claim_type'] == "Accident Severity"), None)
     
-    if audit_report["Overall_Status"] == "PASS":
+    # 1. TIME REPORT
+    if time_check:
+        print(f"TIME CHECK:      [{time_check['result']}]")
+        print(f"   Values:       Report says {time_check['claim_value']} vs Video shows {time_check['video_value']}")
+        print(f"   Note:         {time_check['note']}")
+    else:
+        print("TIME CHECK:      [SKIPPED/ERROR]")
+
+    print("-" * 40)
+
+    # 2. SEVERITY REPORT
+    if sev_check:
+        print(f"SEVERITY CHECK:  [{sev_check['result']}]")
+        print(f"   Values:       Report says '{sev_check['claim_value']}' vs Video shows '{sev_check['video_value']}'")
+        print(f"   Note:         {sev_check['note']}")
+    else:
+        print("SEVERITY CHECK:  [SKIPPED/ERROR]")
+
+    print("="*40)
+    
+    # 3. OVERALL SCORE
+    score = audit_report['score']
+    print(f"🏆 CALCULATED SCORE: {score}/100")
+    
+    if score == 100:
         print("✅ RESULT: REPORT IS CONSISTENT")
     else:
         print("❌ RESULT: DISCREPANCY DETECTED")
