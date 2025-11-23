@@ -56,7 +56,7 @@ class HandwritingEngine(OCREngine):
         self.enabled = False
         
         # In a real deployment, you would uncomment the imports below.
-        
+        """
         try:
             from transformers import TrOCRProcessor, VisionEncoderDecoderModel
             from PIL import Image
@@ -70,6 +70,7 @@ class HandwritingEngine(OCREngine):
             self.enabled = True
         except ImportError:
             logger.warning("Transformers/Torch not found. Handwriting OCR disabled.")
+        """
         if not self.enabled:
             logger.warning("Handwriting Engine is currently a placeholder. Install 'transformers' to enable.")
 
