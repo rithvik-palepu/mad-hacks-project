@@ -1,0 +1,20 @@
+{
+    "score": 100,
+    "status": "COMPLETE",
+    "details": [
+        {
+            "claim_type": "Time of Impact",
+            "claim_value": "152 sec",
+            "video_value": "155.0 sec",
+            "result": "MATCH",
+            "note": "Difference of 3.0s is within tolerance (5s)."
+        },
+        {
+            "claim_type": "Accident Severity",
+            "claim_value": "Severe",
+            "video_value": "Severe",
+            "result": "MATCH",
+            "note": "Reported severity matches video analysis."
+        }
+    ]
+}
