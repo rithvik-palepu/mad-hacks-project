@@ -1,0 +1,7 @@
+{
+    "Video_Path": "data/CADP_accident_001.mp4",
+    "Collision_Detected": true,
+    "F_Actual": 535,
+    "T_Actual": 17.833,
+    "Severity_Actual": "Severe"
+}
